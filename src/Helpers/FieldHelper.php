@@ -2,8 +2,9 @@
 
 namespace Cheesegrits\FilamentGoogleMaps\Helpers;
 
-use Filament\Forms\Components\Field;
+// 🟢 V4 CHANGE: Use the Schema Component as the base class
 use Filament\Schemas\Components\Component;
+use Filament\Forms\Components\Field;
 
 class FieldHelper
 {
@@ -16,9 +17,14 @@ class FieldHelper
 
     public static function getFlatFields($topComponent): array
     {
-        $flatFields = $topComponent->getContainer()->getFlatFields();
+        $flatFields = [];
 
+        // In v4, we can use the schema component iterator
         foreach ($topComponent->getContainer()->getComponents() as $component) {
+            if ($component instanceof Field) {
+                $flatFields[$component->getName()] = $component;
+            }
+
             foreach ($component->getChildComponentContainers() as $container) {
                 if ($container->isHidden()) {
                     continue;
@@ -35,34 +41,27 @@ class FieldHelper
     {
         $topComponent = self::getTopComponent($component);
         $flatFields   = static::getFlatFields($topComponent);
-        $flatFields = collect($flatFields)
-            ->whereInstanceOf(Field::class)->keyBy(fn($field) => $field->getName());
 
-        if ($flatFields->has($field)) {
-            $fieldComponent = $flatFields->get($field);
+        $fieldsCollection = collect($flatFields);
+
+        if ($fieldsCollection->has($field)) {
+            $fieldComponent = $fieldsCollection->get($field);
+
             $statePath = $fieldComponent->getStatePath();
 
-            // In Filament v4, the DOM id typically has 'data.' prefix but getStatePath() might not include it
-            // Try to get the actual ID if available
-            if (method_exists($fieldComponent, 'getId')) {
-                try {
-                    $id = $fieldComponent->getId();
-                    if (! empty($id)) {
-                        return $id;
-                    }
-                } catch (\Throwable $e) {
-                    // getId() might throw if container not initialized, continue to fallback
-                }
-            }
-
-            // Fallback: If statePath doesn't already have data prefix and looks like it needs one
-            if (! str_starts_with($statePath, 'data.') && ! str_contains($statePath, '.')) {
+            // 🛑 V4 FIX: Ensure 'data.' prefix exists for root fields so Livewire can find them
+            if (! str_contains($statePath, '.') && ! str_starts_with($statePath, 'data.')) {
                 return 'data.' . $statePath;
             }
 
             return $statePath;
         }
 
-        return null;
+        // Fallback for when the field object isn't found but we know the name
+        if (! str_contains($field, '.') && ! str_starts_with($field, 'data.')) {
+            return 'data.' . $field;
+        }
+
+        return $field;
     }
 }
